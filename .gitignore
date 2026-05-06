@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.pyc
+venv/
+env/
+
+# Multimedia temporal (NovaSub)
+temp_audio.wav
+*.mp4
+*.mkv
+
+# Whisper Models
+models/
+.whisper_cache/
+
+# IDEs
+.vscode/
+.idea/
