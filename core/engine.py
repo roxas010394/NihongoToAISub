@@ -1,24 +1,32 @@
 from .models import SubtitleLine
-from faster_whisper import WhisperModel
+import whisper
 import subprocess
 import os
+import re
 
 class Subtitulador:
     def __init__(self, model_size="base"):
         self.lines = []
-        self.model = WhisperModel(model_size, device="cpu", compute_type="int8")
+        self.model_size = model_size
+        self.model = None#WhisperModel(self.model_size, device="cpu", compute_type="int8")
+    def cargar_modelo(self):
+        if self.model is None:
+            import torch
+            torch.set_num_threads(8)
+            self.model = whisper.load_model(self.model_size)
     def auto_timing_whisper(self, audio_file):
-        print(f"Analizando {audio_file} con Whisper...")
-        segments, info = self.model.transcribe(audio_file, beam_size=5)
-
-        for segment in segments:
+        self.cargar_modelo()
+        #segments, info = self.model.transcribe(audio_file, beam_size=5)
+        result = self.model.transcribe(audio_file, language="ja")
+        for segment in result['segments']:
+            
             nueva_linea = SubtitleLine(
-                start_time = segment.start,
-                end_time = segment.end,
-                text = segment.text.strip()
+                start_time = segment['start'],
+                end_time = segment['end'],
+                text = segment['text'].strip()
                 )
             self.lines.append(nueva_linea)
-            print(f"[{segment.start:.2f}s -> {segment.end:.2f}s] {segment.text}")
+            print(f"[{segment['start']:.2f}s -> {segment['end']:.2f}s] {segment['text']}")
         return self.lines
     def export_ass(self, filename):
         header = [
@@ -42,6 +50,24 @@ class Subtitulador:
                 end = SubtitleLine.format_time(line.end)
                 f.write(f"Dialogue: 0, {start}, {end}, {line.style},,0,0,0,,{line.text}\n")
         print(f"✅ Archivo exportado exitosamente: {filename}")
+    def import_ass(self, filename):
+        self.lines = []
+        from core.models import SubtitleLine
+        with open(filename, "r", encoding="utf-8") as f:
+            for line in f:
+                if line.startswith("Dialogue"):
+                    partes = line.split(",", 9)
+                    if len(partes)<10:
+                        continue
+                    start_str = partes[1].strip()
+                    end_str = partes[2].strip()
+                    texto = re.sub(r'\{.*?\}', '', partes[9].strip())
+                    def ass_time_to_secs(time_str):
+                        h,m,s = time_str.split(':')
+                        return  int(h) * 3600 + int(m) * 60 + float(s)
+                    nueva_linea = SubtitleLine(start_time = ass_time_to_secs(start_str), end_time = ass_time_to_secs(end_str), text = texto)
+                    self.lines.append(nueva_linea)
+        return self.lines
     def extraer_audio(self, video_path):
         #Extrae el audio de un video y lo guarda en un .wav temporal
         audio_output = "temp_audio.wav"
